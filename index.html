@@ -1,0 +1,1918 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Zonnewijzer Pro v6</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Zonnewijzer">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root {
+  --gold:#ff9d2f; --bg:#000; --panel:#0a0a0a; --panel2:#111;
+  --green:#00ff00; --dim-green:rgba(0,255,0,0.12);
+  --red:#ff0000; --blue:#4488ff; --dim-blue:rgba(68,136,255,0.12);
+  --border:#1a1a1a; --text:#fff; --muted:#666;
+  --nav-h:calc(60px + env(safe-area-inset-bottom));
+  --header-h:42px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+  -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;}
+html,body{height:100%;margin:0;overflow:hidden;}
+body{background:var(--bg);color:var(--text);
+  font-family:'Courier New',monospace;
+  display:flex;flex-direction:column;}
+
+/* ── GPS HEADER ── */
+#gps-header{
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:0.68rem;color:var(--green);
+  padding:6px 10px;border-bottom:1px solid var(--border);
+  height:var(--header-h);flex-shrink:0;gap:6px;
+}
+.gps-left{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;}
+.pulse{width:9px;height:9px;background:var(--red);border-radius:50%;flex-shrink:0;}
+#coords-display{font-size:0.68rem;font-weight:bold;white-space:nowrap;}
+#accuracy-display{font-size:0.7rem;font-weight:bold;color:var(--blue);}
+#zone-display{font-size:0.64rem;color:var(--green);white-space:nowrap;}
+.blink{animation:blink-anim 1s steps(2,start) infinite;}
+@keyframes blink-anim{to{visibility:hidden;}}
+
+/* ── MAIN CONTENT AREA ── */
+#app{flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column;min-height:0;}
+
+/* ── VIEWS ── */
+.view{
+  flex:1;display:none;flex-direction:column;
+  padding:10px 12px 8px;overflow-y:auto;gap:8px;
+  min-height:0;-webkit-overflow-scrolling:touch;
+}
+.view.active{display:flex;}
+#view-log{display:none;flex-direction:column;padding:10px 12px 0;min-height:0;flex:1;overflow:hidden;}
+#view-log.active{display:flex;}
+#log-scroll-wrap{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  min-height:0;padding-bottom:8px;overflow-x:hidden;}
+
+/* ── LAUNCHER ── */
+#view-launcher{
+  flex:1;display:none;flex-direction:column;
+  padding:12px;overflow-y:auto;gap:12px;
+  min-height:0;-webkit-overflow-scrolling:touch;
+}
+#view-launcher.active{display:flex;}
+.launcher-title{
+  font-size:0.6rem;color:var(--green);font-weight:bold;
+  text-transform:uppercase;letter-spacing:2px;
+  padding-bottom:6px;border-bottom:1px solid var(--border);
+}
+.launcher-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
+}
+.launcher-tile{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:4px;padding:14px 8px;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  cursor:pointer;transition:border-color 0.15s,background 0.15s;
+}
+.launcher-tile:active{background:var(--dim-green);border-color:var(--green);}
+.launcher-tile.fav-marked{border-color:var(--gold);border-left:3px solid var(--gold);}
+.launcher-icon{font-size:1.6rem;line-height:1;}
+.launcher-label{font-size:0.55rem;color:var(--green);font-weight:bold;
+  text-transform:uppercase;letter-spacing:1px;text-align:center;}
+.launcher-fav-dot{width:6px;height:6px;border-radius:50%;
+  background:var(--gold);opacity:0;transition:opacity 0.2s;}
+.launcher-tile.fav-marked .launcher-fav-dot{opacity:1;}
+.launcher-section-label{
+  font-size:0.55rem;color:var(--muted);text-transform:uppercase;
+  letter-spacing:1px;padding:4px 0 2px;
+}
+.fav-edit-hint{
+  font-size:0.58rem;color:var(--muted);text-align:center;
+  padding:8px;border:1px dashed #222;border-radius:2px;
+}
+
+/* ── FAVORITE NAV BAR ── */
+#fav-bar{
+  display:grid;background:#050505;
+  border-top:1px solid var(--green);
+  height:var(--nav-h);
+  padding-bottom:env(safe-area-inset-bottom);
+  flex-shrink:0;
+}
+.fav-item{
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;font-size:0.5rem;color:#444;
+  text-transform:uppercase;font-weight:bold;cursor:pointer;
+  padding:0 2px;transition:color 0.15s,background 0.15s;
+}
+.fav-item.active{color:var(--green);background:var(--dim-green);}
+.fav-item:active{filter:brightness(1.5);}
+.fav-icon{font-size:1.15rem;margin-bottom:1px;line-height:1;}
+.fav-launcher{color:#444;}
+.fav-launcher.active{color:var(--green);}
+
+/* ── CARDS & COMPONENTS ── */
+.card{background:var(--panel);border:1px solid var(--border);
+  padding:12px;border-radius:2px;}
+.gold-border{border-left:3px solid var(--gold);}
+.blue-border{border-left:3px solid var(--blue);}
+.green-border{border-left:3px solid var(--green);}
+.label{color:var(--green);font-size:0.58rem;font-weight:bold;
+  text-transform:uppercase;display:block;margin-bottom:3px;letter-spacing:0.5px;}
+.big-time{font-size:2.1rem;color:var(--gold);font-weight:bold;
+  font-variant-numeric:tabular-nums;line-height:1;}
+.eph-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.eph-box{background:#050505;padding:10px;border-top:1px solid var(--gold);}
+.eph-val{font-size:1.1rem;font-weight:bold;margin-top:2px;}
+.eph-sub{font-size:0.65rem;color:var(--green);font-weight:bold;margin-top:2px;}
+.dual-time-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.time-box{background:var(--panel);border:1px solid var(--border);
+  padding:12px;border-radius:2px;}
+.time-box.solar{border-left:3px solid var(--gold);}
+.time-box.home{border-left:3px solid var(--blue);}
+.home-time{font-size:1.4rem;color:var(--blue);font-weight:bold;
+  font-variant-numeric:tabular-nums;line-height:1;margin:2px 0;}
+.sub-label{font-size:0.52rem;color:#4488ff;font-weight:bold;
+  margin-top:3px;opacity:0.8;}
+.address-box{font-size:0.67rem;color:#ccc;line-height:1.4;
+  margin-top:5px;border-top:1px solid #222;padding-top:8px;font-style:italic;}
+
+/* ── ARC CANVAS ── */
+#arc-wrap{position:relative;width:100%;flex-shrink:0;margin-top:20px;}
+#arc-canvas{display:block;width:100%;}
+#arc-time-label{display:none;}
+#arc-legend{display:flex;justify-content:center;gap:8px;
+  margin-top:4px;margin-bottom:8px;flex-wrap:wrap;}
+.leg-item{display:flex;align-items:center;gap:4px;
+  font-size:0.58rem;color:#888;text-transform:uppercase;font-weight:bold;}
+.leg-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+
+/* ── CONFIG ── */
+.cfg-section-title{font-size:0.58rem;color:var(--green);font-weight:bold;
+  text-transform:uppercase;letter-spacing:1px;
+  padding-bottom:4px;border-bottom:1px solid #222;margin-bottom:2px;}
+.cfg-btn{display:block;width:100%;background:var(--dim-green);
+  border:1px solid var(--green);color:var(--green);
+  font-family:'Courier New',monospace;font-size:0.68rem;font-weight:bold;
+  padding:11px 10px;cursor:pointer;text-transform:uppercase;
+  border-radius:2px;text-align:center;letter-spacing:1px;margin-top:4px;}
+.cfg-btn:active{filter:brightness(1.5);}
+.cfg-btn.danger{background:rgba(255,0,0,0.1);border-color:var(--red);color:var(--red);}
+.cfg-btn.blue{background:var(--dim-blue);border-color:var(--blue);color:var(--blue);}
+.cfg-info-box{background:#050505;border:1px solid var(--border);
+  border-left:3px solid var(--blue);padding:12px;border-radius:2px;
+  font-size:0.66rem;line-height:1.7;}
+.cfg-row{display:flex;justify-content:space-between;align-items:center;padding:2px 0;}
+.cfg-key{color:#555;font-size:0.56rem;text-transform:uppercase;}
+.cfg-val{color:#fff;font-weight:bold;}
+.cfg-val.blue{color:var(--blue);}
+.cfg-val.gold{color:var(--gold);}
+.cfg-val.green{color:var(--green);}
+.cfg-status{font-size:0.6rem;padding:8px 10px;border-radius:2px;
+  text-align:center;margin-top:4px;}
+.cfg-status.ok{background:rgba(0,255,0,0.08);color:var(--green);border:1px solid #1a3a1a;}
+.cfg-status.pending{background:rgba(68,136,255,0.1);color:var(--blue);border:1px solid #1a2a4a;}
+.cfg-status.error{background:rgba(255,0,0,0.08);color:var(--red);border:1px solid #3a1a1a;}
+
+/* ── SETTINGS TOGGLE ROW ── */
+.setting-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 12px;background:var(--panel);
+  border:1px solid var(--border);border-radius:2px;margin-top:4px;
+}
+.setting-label{font-size:0.64rem;color:var(--green);font-weight:bold;
+  text-transform:uppercase;letter-spacing:0.5px;}
+.setting-desc{font-size:0.54rem;color:var(--muted);margin-top:2px;}
+.seg-ctrl{display:flex;border:1px solid #333;border-radius:2px;overflow:hidden;}
+.seg-btn{padding:6px 10px;background:#050505;color:#555;
+  font-family:'Courier New',monospace;font-size:0.58rem;font-weight:bold;
+  text-transform:uppercase;cursor:pointer;border:none;letter-spacing:0.5px;}
+.seg-btn.active{background:var(--dim-green);color:var(--green);}
+.seg-btn:active{filter:brightness(1.5);}
+
+/* ── LOG TABLE ── */
+#log-header-row{flex-shrink:0;display:flex;
+  justify-content:space-between;align-items:flex-end;margin-bottom:5px;}
+.log-table-wrap{background:var(--panel);border:1px solid var(--border);border-radius:2px;}
+table{width:100%;border-collapse:collapse;font-size:0.58rem;}
+th{color:var(--green);text-align:left;padding:8px 4px;
+  border-bottom:2px solid var(--green);text-transform:uppercase;
+  position:sticky;top:0;background:#111;z-index:2;}
+td{padding:8px 4px;border-bottom:1px solid #111;color:#aaa;}
+.today-row{background:var(--dim-green);font-weight:bold;}
+.today-row td{color:var(--green)!important;}
+
+/* ── INFO ── */
+.info-lang-toggle{display:flex;gap:0;margin-bottom:2px;
+  border:1px solid #333;border-radius:3px;overflow:hidden;flex-shrink:0;}
+.info-lang-btn{flex:1;padding:8px;background:#050505;color:#555;
+  font-family:'Courier New',monospace;font-size:0.63rem;font-weight:bold;
+  text-transform:uppercase;cursor:pointer;border:none;letter-spacing:1px;}
+.info-lang-btn.active{background:var(--dim-green);color:var(--green);}
+.info-block{display:none;flex-direction:column;gap:8px;}
+.info-block.active{display:flex;}
+.info-section{background:var(--panel);border:1px solid var(--border);
+  border-left:3px solid var(--gold);padding:12px;border-radius:2px;}
+.info-section h3{color:var(--gold);font-size:0.63rem;text-transform:uppercase;
+  letter-spacing:1px;margin:0 0 8px 0;font-family:'Courier New',monospace;}
+.info-section p{color:#aaa;font-size:0.6rem;line-height:1.8;
+  margin:0 0 6px 0;font-family:'Courier New',monospace;}
+
+button:active{filter:brightness(1.5);}
+</style>
+</head>
+<body>
+
+<!-- GPS HEADER (altijd zichtbaar) -->
+<div id="gps-header">
+  <div class="gps-left">
+    <div id="gps-pulse" class="pulse blink"></div>
+    <div id="coords-display">GPS SYNC...</div>
+    <div id="accuracy-display">(± --m)</div>
+  </div>
+  <div id="zone-display">ZONE: UTC --</div>
+</div>
+
+<div id="app">
+
+<!-- ══════════════════════════════════════════ -->
+<!-- VIEW: LAUNCHER                            -->
+<!-- ══════════════════════════════════════════ -->
+<div id="view-launcher" class="view">
+  <div class="launcher-title" id="lbl-all-pages">Alle pagina's</div>
+  <div class="launcher-grid" id="launcher-grid"></div>
+  <div class="fav-edit-hint" id="lbl-fav-hint">Tik lang op een tegel om toe te voegen aan favorieten</div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- VIEW: HOME                                -->
+<!-- ══════════════════════════════════════════ -->
+<div id="view-home" class="view active">
+  <div id="arc-wrap"><canvas id="arc-canvas"></canvas><div id="arc-time-label"></div></div>
+  <div id="arc-legend">
+    <div class="leg-item"><div class="leg-dot" style="background:#4488ff;"></div><span id="lbl-golden">Golden Hour</span></div>
+    <div class="leg-item"><div class="leg-dot" style="background:#ff3333;"></div><span id="lbl-uv">UV Gevaar</span></div>
+    <div class="leg-item"><div class="leg-dot" style="background:#ffdd00;"></div><span id="lbl-daylight">Daglicht</span></div>
+    <div class="leg-item"><div class="leg-dot" style="background:#2a2a22;"></div><span id="lbl-night">Nacht</span></div>
+  </div>
+  <div class="dual-time-row">
+    <div class="time-box solar">
+      <span class="label" id="lbl-solar-time">☀️ Ware Zonnetijd</span>
+      <div id="solar-time" class="big-time" style="font-size:1.4rem;">--:--:--</div>
+      <div id="solar-diff" style="font-size:0.72rem;color:var(--green);font-weight:bold;margin-top:4px;">EOT: --</div>
+    </div>
+    <div class="time-box home">
+      <span class="label" style="color:var(--blue);">⚓ <span id="home-port-label">Thuishaven</span></span>
+      <div id="home-port-time" class="home-time">--:--:--</div>
+      <div id="home-port-status" class="sub-label">CET/CEST</div>
+      <div id="home-port-city" style="font-size:0.52rem;color:#4488ff;margin-top:3px;opacity:0.85;">--</div>
+    </div>
+  </div>
+  <div class="eph-grid">
+    <div class="card" style="border-left:3px solid #333;">
+      <span class="label">🌍 UTC</span>
+      <div id="utc-time" style="font-size:1.05rem;color:#888;">--:--:--</div>
+    </div>
+    <div class="card green-border">
+      <span class="label" id="lbl-local">📍 Lokaal</span>
+      <div id="local-time" style="font-size:1.05rem;">--:--:--</div>
+    </div>
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+      <span class="label" id="lbl-location" style="margin-bottom:0;">Locatie</span>
+      <button onclick="manualAddressUpdate()" id="addr-btn"
+        style="background:var(--dim-green);border:1px solid var(--green);color:var(--green);
+        font-family:'Courier New',monospace;font-size:0.52rem;padding:4px 6px;
+        cursor:pointer;text-transform:uppercase;border-radius:2px;">🔄 Update</button>
+    </div>
+    <div id="address-display" class="address-box" id="lbl-wait-gps">Wacht op GPS fix...</div>
+  </div>
+  <div class="card" style="text-align:center;border:1px dashed #222;padding:8px;">
+    <div id="date-display" style="font-size:0.78rem;color:var(--gold);text-transform:uppercase;">--</div>
+    <div id="year-display" style="font-size:0.58rem;color:var(--green);opacity:0.6;">--</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- VIEW: SOLAR                               -->
+<!-- ══════════════════════════════════════════ -->
+<div id="view-solar" class="view">
+  <span class="label" id="lbl-solar-eph">Solaire Ephemeriden</span>
+  <div class="card gold-border">
+    <span class="label" id="lbl-solar-noon">Solar Noon (Zonshoogte Max)</span>
+    <div id="val-noon" style="font-size:1.75rem;color:var(--gold);font-weight:bold;">--:--:--</div>
+  </div>
+  <div class="eph-grid">
+    <div class="eph-box"><span class="label" id="lbl-rise">Opkomst</span><div id="out-rise" class="eph-val">--:--</div></div>
+    <div class="eph-box"><span class="label" id="lbl-set">Ondergang</span><div id="out-set" class="eph-val">--:--</div></div>
+    <div class="eph-box"><span class="label" id="lbl-gold-m">Gouden Uur (O)</span><div id="out-gold-morning" class="eph-val">--:--</div><div id="dur-gold-morning" class="eph-sub">-</div></div>
+    <div class="eph-box"><span class="label" id="lbl-gold-e">Gouden Uur (A)</span><div id="out-gold-evening" class="eph-val">--:--</div><div id="dur-gold-evening" class="eph-sub">-</div></div>
+  </div>
+  <div class="card" style="border-left:3px solid #ff3333;">
+    <span class="label" style="color:#ff3333;" id="lbl-uv-danger">UV Gevaarzone</span>
+    <div class="eph-grid" style="margin-top:6px;">
+      <div class="eph-box"><span class="label">Start</span><div id="uv-start" class="eph-val" style="color:#ff3333;">--:--</div></div>
+      <div class="eph-box"><span class="label">Einde</span><div id="uv-end" class="eph-val" style="color:#ff3333;">--:--</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- VIEW: LUNAR                               -->
+<!-- ══════════════════════════════════════════ -->
+<div id="view-lunar" class="view">
+  <span class="label" id="lbl-moon-title">Maan Fase &amp; Hoek</span>
+  <div class="card" style="text-align:center;padding:15px;">
+    <div id="moon-icon" style="font-size:3.2rem;margin-bottom:5px;">🌑</div>
+    <div id="moon-phase-name" style="color:var(--gold);font-weight:bold;font-size:0.73rem;letter-spacing:1px;">--</div>
+  </div>
+  <div class="eph-grid">
+    <div class="eph-box"><span class="label" id="lbl-moon-rise">Maan Op</span><div id="moon-rise" class="eph-val">--:--</div></div>
+    <div class="eph-box"><span class="label" id="lbl-moon-set">Maan Onder</span><div id="moon-set" class="eph-val">--:--</div></div>
+    <div class="eph-box"><span class="label" id="lbl-illum">Verlichting</span><div id="moon-illum" class="eph-val" style="color:var(--gold);">--%</div></div>
+    <div class="eph-box"><span class="label" id="lbl-pos-angle">Positie Hoek</span><div id="moon-deg" class="eph-val" style="color:var(--green);">--°</div><div class="eph-sub">180° = VOL</div></div>
+    <div class="eph-box"><span class="label" id="lbl-age">Ouderdom</span><div id="moon-age" class="eph-val">-- d</div></div>
+    <div class="eph-box"><span class="label" id="lbl-segment">Segment</span><div id="moon-phase-num" class="eph-val">--/8</div></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- VIEW: LOG                                 -->
+<!-- ══════════════════════════════════════════ -->
+<div id="view-log">
+  <div id="log-header-row">
+    <span class="label" style="margin-bottom:0;" id="lbl-month-overview">Maandoverzicht</span>
+    <span id="log-month-year" style="font-size:0.68rem;color:var(--green);font-weight:bold;">--</span>
+  </div>
+  <div id="log-scroll-wrap">
+    <div class="log-table-wrap">
+      <table>
+        <thead><tr>
+          <th id="th-day">DAG</th>
+          <th id="th-rise">OP</th>
+          <th id="th-noon">MIDDAG</th>
+          <th id="th-set">AF</th>
+        </tr></thead>
+        <tbody id="log-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- VIEW: CONFIG                              -->
+<!-- ══════════════════════════════════════════ -->
+<div id="view-config" class="view" style="gap:10px;">
+  <span class="label" style="font-size:0.72rem;letter-spacing:2px;">⚙️ <span id="lbl-config-title">Instellingen</span></span>
+
+  <!-- Taal -->
+  <div class="cfg-section-title" id="lbl-cfg-lang">Taal / Language / Langue</div>
+  <div class="setting-row">
+    <div><div class="setting-label" id="lbl-lang-setting">Taal</div></div>
+    <div class="seg-ctrl">
+      <button class="seg-btn active" onclick="setLang('nl',this)">NL</button>
+      <button class="seg-btn" onclick="setLang('en',this)">EN</button>
+      <button class="seg-btn" onclick="setLang('fr',this)">FR</button>
+    </div>
+  </div>
+
+  <!-- Tijdformaat -->
+  <div class="cfg-section-title" id="lbl-cfg-units">Eenheden</div>
+  <div class="setting-row">
+    <div>
+      <div class="setting-label" id="lbl-time-fmt">Tijdformaat</div>
+      <div class="setting-desc" id="lbl-time-fmt-desc">24u of 12u AM/PM</div>
+    </div>
+    <div class="seg-ctrl">
+      <button class="seg-btn active" onclick="setUnit('timeFormat','24h',this)">24h</button>
+      <button class="seg-btn" onclick="setUnit('timeFormat','12h',this)">12h</button>
+    </div>
+  </div>
+  <div class="setting-row">
+    <div>
+      <div class="setting-label" id="lbl-coord-fmt">Coördinaten</div>
+      <div class="setting-desc">DD / DMS / DDM</div>
+    </div>
+    <div class="seg-ctrl">
+      <button class="seg-btn active" onclick="setUnit('coordFormat','DD',this)">DD</button>
+      <button class="seg-btn" onclick="setUnit('coordFormat','DMS',this)">DMS</button>
+      <button class="seg-btn" onclick="setUnit('coordFormat','DDM',this)">DDM</button>
+    </div>
+  </div>
+  <div class="setting-row">
+    <div>
+      <div class="setting-label" id="lbl-temp-unit">Temperatuur</div>
+    </div>
+    <div class="seg-ctrl">
+      <button class="seg-btn active" onclick="setUnit('tempUnit','C',this)">°C</button>
+      <button class="seg-btn" onclick="setUnit('tempUnit','F',this)">°F</button>
+    </div>
+  </div>
+
+  <!-- Spraak -->
+  <div class="cfg-section-title" id="lbl-cfg-voice">Spraak</div>
+  <div class="setting-row">
+    <div>
+      <div class="setting-label" id="lbl-voice-on">Gesproken output</div>
+      <div class="setting-desc" id="lbl-voice-desc">Web Speech API</div>
+    </div>
+    <div class="seg-ctrl">
+      <button class="seg-btn" id="voice-on-btn" onclick="setVoice(true,this)">AAN</button>
+      <button class="seg-btn active" id="voice-off-btn" onclick="setVoice(false,this)">UIT</button>
+    </div>
+  </div>
+  <div class="setting-row">
+    <div>
+      <div class="setting-label" id="lbl-voice-speed">Spreeksnelheid</div>
+    </div>
+    <div class="seg-ctrl">
+      <button class="seg-btn" onclick="setUnit('voiceRate',0.8,this)" id="vr-slow">Traag</button>
+      <button class="seg-btn active" onclick="setUnit('voiceRate',1.0,this)" id="vr-normal">Normaal</button>
+      <button class="seg-btn" onclick="setUnit('voiceRate',1.3,this)" id="vr-fast">Snel</button>
+    </div>
+  </div>
+
+  <!-- Thuishaven -->
+  <div class="cfg-section-title" id="lbl-cfg-home">Thuishaven</div>
+  <div class="cfg-info-box">
+    <div class="cfg-row"><span class="cfg-key" id="lbl-hp-name">Naam</span><span class="cfg-val blue" id="cfg-home-name">--</span></div>
+    <div class="cfg-row"><span class="cfg-key" id="lbl-hp-offset">UTC Offset</span><span class="cfg-val gold" id="cfg-home-offset">--</span></div>
+    <div class="cfg-row"><span class="cfg-key">DST</span><span class="cfg-val green" id="cfg-home-dst">--</span></div>
+  </div>
+  <button class="cfg-btn" onclick="configureHomePort()" id="btn-set-home">📍 Stel thuishaven in</button>
+
+  <!-- Favorieten beheren -->
+  <div class="cfg-section-title" id="lbl-cfg-favs">Favorieten beheren</div>
+  <div id="fav-manage-list" style="display:flex;flex-direction:column;gap:4px;"></div>
+  <div style="font-size:0.55rem;color:var(--muted);margin-top:4px;" id="lbl-fav-info">Max 4 favorieten · Home is altijd aanwezig</div>
+
+  <!-- Reset -->
+  <div class="cfg-section-title" id="lbl-cfg-data">Data</div>
+  <button class="cfg-btn danger" onclick="resetAll()" id="btn-reset">🗑 Reset alle instellingen</button>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- VIEW: INFO                                -->
+<!-- ══════════════════════════════════════════ -->
+<div id="view-info" class="view" style="gap:10px;">
+  <div class="info-lang-toggle">
+    <button class="info-lang-btn active" onclick="switchInfoLang('nl',this)">NL</button>
+    <button class="info-lang-btn" onclick="switchInfoLang('en',this)">EN</button>
+    <button class="info-lang-btn" onclick="switchInfoLang('fr',this)">FR</button>
+  </div>
+
+  <div id="info-nl" class="info-block active">
+    <div class="info-section">
+      <h3>Ware Zonnetijd</h3>
+      <p>De ware zonnetijd is gebaseerd op de werkelijke positie van de zon aan de hemel. Ze verschilt van de klokrentijd door de tijdszone en de tijdsvergelijking (EOT).</p>
+    </div>
+    <div class="info-section">
+      <h3>Tijdsvergelijking (EOT)</h3>
+      <p>De tijdsvergelijking is het verschil in minuten tussen de ware zonnetijd en de gemiddelde zonnetijd. Ze varieert door het jaar tussen −16 en +14 minuten.</p>
+    </div>
+    <div class="info-section">
+      <h3>Gouden Uur</h3>
+      <p>Het gouden uur is de periode net na zonsopgang en net voor zonsondergang. Het licht is dan warm en zacht — ideaal voor fotografie en observatie.</p>
+    </div>
+    <div class="info-section">
+      <h3>UV Gevaarzone</h3>
+      <p>De UV-gevaarzone geeft aan wanneer de UV-straling voldoende hoog is om huidschade te veroorzaken. Bescherm uzelf in deze periode.</p>
+    </div>
+  </div>
+
+  <div id="info-en" class="info-block">
+    <div class="info-section">
+      <h3>True Solar Time</h3>
+      <p>True solar time is based on the actual position of the sun in the sky. It differs from clock time due to the time zone and the equation of time (EOT).</p>
+    </div>
+    <div class="info-section">
+      <h3>Equation of Time (EOT)</h3>
+      <p>The equation of time is the difference in minutes between true solar time and mean solar time. It varies throughout the year between −16 and +14 minutes.</p>
+    </div>
+    <div class="info-section">
+      <h3>Golden Hour</h3>
+      <p>The golden hour is the period shortly after sunrise and before sunset. The light is warm and soft — ideal for photography and observation.</p>
+    </div>
+    <div class="info-section">
+      <h3>UV Danger Zone</h3>
+      <p>The UV danger zone indicates when UV radiation is high enough to cause skin damage. Protect yourself during this period.</p>
+    </div>
+  </div>
+
+  <div id="info-fr" class="info-block">
+    <div class="info-section">
+      <h3>Heure solaire vraie</h3>
+      <p>L'heure solaire vraie est basée sur la position réelle du soleil dans le ciel. Elle diffère de l'heure légale en raison du fuseau horaire et de l'équation du temps (EOT).</p>
+    </div>
+    <div class="info-section">
+      <h3>Équation du temps (EOT)</h3>
+      <p>L'équation du temps est la différence en minutes entre l'heure solaire vraie et l'heure solaire moyenne. Elle varie entre −16 et +14 minutes au cours de l'année.</p>
+    </div>
+    <div class="info-section">
+      <h3>Heure dorée</h3>
+      <p>L'heure dorée est la période juste après le lever du soleil et avant le coucher du soleil. La lumière est chaude et douce — idéale pour la photographie et l'observation.</p>
+    </div>
+    <div class="info-section">
+      <h3>Zone de danger UV</h3>
+      <p>La zone de danger UV indique quand le rayonnement UV est suffisamment élevé pour provoquer des dommages cutanés. Protégez-vous pendant cette période.</p>
+    </div>
+  </div>
+
+  <div class="info-section" style="border-left-color:var(--green);">
+    <h3 style="color:var(--green);">Zonnewijzer Pro v6</h3>
+    <p>PWA · Offline · GPS · EOT · Maanfasen · i18n</p>
+    <p style="color:#444;">Architectuur: Paginaregister · Router · Settings store · i18n · Web Speech API</p>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════ -->
+<!-- VIEW: POI                                 -->
+<!-- ══════════════════════════════════════════ -->
+<div id="view-poi" class="view" style="gap:10px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <span class="label" style="font-size:0.72rem;letter-spacing:2px;">❤️ <span id="lbl-poi-title">Opgeslagen Plaatsen</span></span>
+    <button onclick="poiAddCurrent()" id="btn-poi-add"
+      style="background:rgba(255,0,80,0.12);border:1px solid #ff0050;color:#ff0050;
+      font-family:'Courier New',monospace;font-size:0.55rem;padding:5px 8px;
+      cursor:pointer;text-transform:uppercase;border-radius:2px;letter-spacing:1px;">
+      + <span id="lbl-poi-add-btn">Voeg huidige locatie toe</span>
+    </button>
+  </div>
+  <div id="poi-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+  <div id="poi-empty" style="display:none;text-align:center;padding:30px 10px;
+    border:1px dashed #222;border-radius:2px;">
+    <div style="font-size:2rem;margin-bottom:8px;">❤️</div>
+    <div style="font-size:0.65rem;color:var(--muted);" id="lbl-poi-empty">Nog geen plaatsen opgeslagen.</div>
+    <div style="font-size:0.58rem;color:#333;margin-top:4px;" id="lbl-poi-hint">Tik op + om je huidige locatie toe te voegen.</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════ -->
+<!-- VIEW: WEER                                -->
+<!-- ══════════════════════════════════════════ -->
+<div id="view-weer" class="view" style="gap:8px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <span class="label" style="font-size:0.72rem;letter-spacing:2px;">🌤️ <span id="lbl-weer-title">Weerbericht</span></span>
+    <button onclick="fetchWeer()" id="btn-weer-refresh"
+      style="background:var(--dim-blue);border:1px solid var(--blue);color:var(--blue);
+      font-family:'Courier New',monospace;font-size:0.55rem;padding:5px 8px;
+      cursor:pointer;text-transform:uppercase;border-radius:2px;letter-spacing:1px;">
+      🔄 <span id="lbl-weer-refresh">Vernieuwen</span>
+    </button>
+  </div>
+
+  <!-- Status -->
+  <div id="weer-status" class="cfg-status pending" style="display:none;"></div>
+
+  <!-- Hoofdtemperatuur -->
+  <div id="weer-main" style="display:none;">
+    <div class="card gold-border" style="text-align:center;padding:14px;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
+        <img id="weer-icon" src="" alt="" style="width:52px;height:52px;display:none;">
+        <div>
+          <div id="weer-temp" style="font-size:2.4rem;color:var(--gold);font-weight:bold;font-variant-numeric:tabular-nums;line-height:1;">--°C</div>
+          <div id="weer-desc" style="font-size:0.65rem;color:#aaa;margin-top:2px;text-transform:capitalize;">--</div>
+        </div>
+      </div>
+      <div id="weer-city" style="font-size:0.58rem;color:var(--green);margin-top:6px;letter-spacing:1px;">--</div>
+    </div>
+
+    <!-- Gevoels / min / max -->
+    <div class="eph-grid">
+      <div class="eph-box"><span class="label" id="lbl-feels">Gevoelstemperatuur</span><div id="weer-feels" class="eph-val">--°C</div></div>
+      <div class="eph-box"><span class="label" id="lbl-humidity">Vochtigheid</span><div id="weer-humid" class="eph-val" style="color:var(--blue);">--%</div></div>
+      <div class="eph-box"><span class="label" id="lbl-temp-min">Min</span><div id="weer-min" class="eph-val">--°C</div></div>
+      <div class="eph-box"><span class="label" id="lbl-temp-max">Max</span><div id="weer-max" class="eph-val">--°C</div></div>
+    </div>
+
+    <!-- Wind -->
+    <div class="card" style="border-left:3px solid #4488ff;">
+      <span class="label" id="lbl-wind">💨 Wind</span>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px;">
+        <div id="weer-wind-speed" style="font-size:1.4rem;font-weight:bold;color:var(--blue);">-- km/u</div>
+        <div id="weer-beaufort" style="font-size:0.65rem;color:#888;">-- Bft</div>
+      </div>
+      <div id="weer-beaufort-desc" style="font-size:0.58rem;color:#666;margin-top:2px;">--</div>
+    </div>
+
+    <!-- Druk / Bewolking / Neerslag -->
+    <div class="eph-grid">
+      <div class="eph-box"><span class="label" id="lbl-pressure">Luchtdruk</span><div id="weer-pressure" class="eph-val" style="font-size:0.95rem;">-- hPa</div></div>
+      <div class="eph-box"><span class="label" id="lbl-clouds">Bewolking</span><div id="weer-clouds" class="eph-val">--%</div></div>
+      <div class="eph-box" style="grid-column:span 2;"><span class="label" id="lbl-rain">Neerslag</span><div id="weer-rain" class="eph-val" style="font-size:0.85rem;">--</div></div>
+    </div>
+
+    <!-- Zon -->
+    <div class="eph-grid">
+      <div class="eph-box"><span class="label" id="lbl-w-sunrise">Zonsopgang</span><div id="weer-sunrise" class="eph-val">--:--</div></div>
+      <div class="eph-box"><span class="label" id="lbl-w-sunset">Zonsondergang</span><div id="weer-sunset" class="eph-val">--:--</div></div>
+    </div>
+
+    <!-- Timestamp -->
+    <div id="weer-updated" style="font-size:0.52rem;color:#333;text-align:right;padding:2px 0;"></div>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<!-- ══════════════════════════════════════════ -->
+<!-- FAVORITE NAV BAR                          -->
+<!-- ══════════════════════════════════════════ -->
+<div id="fav-bar"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  LAAG 0 — SETTINGS STORE
+// ═══════════════════════════════════════════════════════════════
+const DEFAULT_SETTINGS = {
+  lang:        'nl',
+  timeFormat:  '24h',
+  coordFormat: 'DD',
+  tempUnit:    'C',
+  voice:       false,
+  voiceRate:   1.0,
+  favorites:   ['home','solar','lunar','log'],
+  homePortName:'Thuishaven',
+  homePortOffset: null
+};
+
+let SETTINGS = {...DEFAULT_SETTINGS};
+function loadSettings(){
+  try{
+    const s = JSON.parse(localStorage.getItem('zp_settings')||'{}');
+    SETTINGS = {...DEFAULT_SETTINGS,...s};
+  }catch(e){}
+}
+function saveSettings(){
+  localStorage.setItem('zp_settings', JSON.stringify(SETTINGS));
+}
+function setLang(lang, btn){
+  SETTINGS.lang = lang;
+  saveSettings();
+  // update seg-ctrl active
+  btn.closest('.seg-ctrl').querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  applyI18n();
+  rebuildFavBar();
+  rebuildLauncher();
+}
+function setUnit(key, val, btn){
+  SETTINGS[key] = val;
+  saveSettings();
+  if(btn){
+    btn.closest('.seg-ctrl').querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+}
+function setVoice(on, btn){
+  SETTINGS.voice = on;
+  saveSettings();
+  btn.closest('.seg-ctrl').querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function resetAll(){
+  if(!confirm(t('confirm_reset'))) return;
+  localStorage.clear();
+  location.reload();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  i18n
+// ═══════════════════════════════════════════════════════════════
+const I18N = {
+  nl:{
+    home:'Thuis', solar:'Zon', lunar:'Maan', log:'Log',
+    config:'Instellingen', info:'Info', launcher:'Menu',
+    solar_time:'Ware Zonnetijd', sunrise:'Opkomst', sunset:'Ondergang',
+    solar_noon:'Zonsopperste', golden_hour:'Gouden Uur',
+    eot:'Tijdsverg. (EOT)', uv_danger:'UV Gevaarzone',
+    moon_phase:'Maanfase', full_moon:'Volle maan', new_moon:'Nieuwe maan',
+    illumination:'Verlichting', moon_age:'Ouderdom', moon_segment:'Segment',
+    moon_rise:'Maan Op', moon_set:'Maan Onder', pos_angle:'Positie Hoek',
+    month_overview:'Maandoverzicht', local:'Lokaal', location:'Locatie',
+    astronomical_year:'ASTRONOMISCH JAAR',
+    gps_sync:'GPS SYNC...', gps_denied:'Toestemming geweigerd',
+    gps_unavailable:'GPS niet beschikbaar', gps_timeout:'GPS timeout...',
+    accuracy:'Nauwkeurigheid', all_pages:'Alle pagina\'s',
+    fav_hint:'Tik lang op een tegel om toe te voegen',
+    confirm_reset:'Alle instellingen wissen?',
+    settings_title:'Instellingen', lang_setting:'Taal',
+    time_fmt:'Tijdformaat', coord_fmt:'Coördinaten',
+    temp_unit:'Temperatuur', voice_on:'Gesproken output',
+    voice_desc:'Web Speech API', voice_speed:'Spreeksnelheid',
+    home_port:'Thuishaven', data:'Data',
+    reset:'Reset alle instellingen',
+    favs_manage:'Favorieten beheren',
+    fav_info:'Max 4 favorieten · Home is altijd aanwezig',
+    units:'Eenheden', wait_gps:'Wacht op GPS fix...',
+    day:'DAG', rise:'OP', noon:'MIDDAG', set:'AF',
+    golden_m:'Gouden Uur (O)', golden_e:'Gouden Uur (A)',
+    set_home:'📍 Stel thuishaven in',
+    slow:'Traag', normal:'Normaal', fast:'Snel',
+    phase_names:['NIEUWE MAAN','JONGE MAANSKRIEL','EERSTE KWARTIER','WASSENDE MAAN',
+                 'VOLLE MAAN','AFNEMENDE MAAN','LAATSTE KWARTIER','ASGRAUWE MAAN'],
+    poi:'Plaatsen', poi_title:'Opgeslagen Plaatsen',
+    poi_add:'Voeg huidige locatie toe', poi_empty:'Nog geen plaatsen opgeslagen.',
+    poi_hint:'Tik op + om je huidige locatie toe te voegen.',
+    poi_name_prompt:'Naam voor deze plaats:',
+    poi_no_gps:'Geen GPS fix beschikbaar.',
+    poi_delete_confirm:'Deze plaats verwijderen?',
+    poi_fetching:'Adres ophalen...',
+    weer:'Weer', weer_title:'Weerbericht', weer_refresh:'Vernieuwen',
+    weer_loading:'Weerdata ophalen...', weer_no_gps:'Geen GPS fix beschikbaar.',
+    weer_error:'Weer ophalen mislukt.', weer_updated:'Bijgewerkt om',
+    feels:'Gevoelstemperatuur', humidity:'Vochtigheid',
+    temp_min:'Min', temp_max:'Max', wind:'Wind',
+    pressure:'Luchtdruk', clouds:'Bewolking', rain:'Neerslag',
+    no_rain:'Geen neerslag', w_sunrise:'Zonsopgang', w_sunset:'Zonsondergang',
+    months:['Januari','Februari','Maart','April','Mei','Juni',
+            'Juli','Augustus','September','Oktober','November','December'],
+  },
+  en:{
+    home:'Home', solar:'Sun', lunar:'Moon', log:'Log',
+    config:'Settings', info:'Info', launcher:'Menu',
+    solar_time:'True Solar Time', sunrise:'Sunrise', sunset:'Sunset',
+    solar_noon:'Solar Noon', golden_hour:'Golden Hour',
+    eot:'Equation of Time', uv_danger:'UV Danger Zone',
+    moon_phase:'Moon Phase', full_moon:'Full Moon', new_moon:'New Moon',
+    illumination:'Illumination', moon_age:'Age', moon_segment:'Segment',
+    moon_rise:'Moonrise', moon_set:'Moonset', pos_angle:'Position Angle',
+    month_overview:'Monthly Overview', local:'Local', location:'Location',
+    astronomical_year:'ASTRONOMICAL YEAR',
+    gps_sync:'GPS SYNC...', gps_denied:'Permission denied',
+    gps_unavailable:'GPS not supported', gps_timeout:'GPS timeout...',
+    accuracy:'Accuracy', all_pages:'All pages',
+    fav_hint:'Long press a tile to add to favourites',
+    confirm_reset:'Clear all settings?',
+    settings_title:'Settings', lang_setting:'Language',
+    time_fmt:'Time format', coord_fmt:'Coordinates',
+    temp_unit:'Temperature', voice_on:'Voice output',
+    voice_desc:'Web Speech API', voice_speed:'Speech rate',
+    home_port:'Home Port', data:'Data',
+    reset:'Reset all settings',
+    favs_manage:'Manage favourites',
+    fav_info:'Max 4 favourites · Home is always present',
+    units:'Units', wait_gps:'Waiting for GPS fix...',
+    day:'DAY', rise:'RISE', noon:'NOON', set:'SET',
+    golden_m:'Golden Hour (rise)', golden_e:'Golden Hour (set)',
+    set_home:'📍 Set home port',
+    poi:'Places', poi_title:'Saved Places',
+    poi_add:'Add current location', poi_empty:'No saved places yet.',
+    poi_hint:'Tap + to add your current location.',
+    poi_name_prompt:'Name for this place:',
+    poi_no_gps:'No GPS fix available.',
+    poi_delete_confirm:'Delete this place?',
+    poi_fetching:'Fetching address...',
+    weer:'Weather', weer_title:'Weather report', weer_refresh:'Refresh',
+    weer_loading:'Fetching weather data...', weer_no_gps:'No GPS fix available.',
+    weer_error:'Failed to fetch weather.', weer_updated:'Updated at',
+    feels:'Feels like', humidity:'Humidity',
+    temp_min:'Min', temp_max:'Max', wind:'Wind',
+    pressure:'Pressure', clouds:'Cloud cover', rain:'Precipitation',
+    no_rain:'No precipitation', w_sunrise:'Sunrise', w_sunset:'Sunset',
+    slow:'Slow', normal:'Normal', fast:'Fast',
+    phase_names:['NEW MOON','WAXING CRESCENT','FIRST QUARTER','WAXING GIBBOUS',
+                 'FULL MOON','WANING GIBBOUS','LAST QUARTER','WANING CRESCENT'],
+    months:['January','February','March','April','May','June',
+            'July','August','September','October','November','December'],
+  },
+  fr:{
+    home:'Accueil', solar:'Soleil', lunar:'Lune', log:'Journal',
+    config:'Réglages', info:'Info', launcher:'Menu',
+    solar_time:'Heure solaire vraie', sunrise:'Lever du soleil', sunset:'Coucher du soleil',
+    solar_noon:'Midi solaire', golden_hour:'Heure dorée',
+    eot:'Équation du temps', uv_danger:'Zone UV danger',
+    moon_phase:'Phase lunaire', full_moon:'Pleine lune', new_moon:'Nouvelle lune',
+    illumination:'Illumination', moon_age:'Âge', moon_segment:'Segment',
+    moon_rise:'Lever lune', moon_set:'Coucher lune', pos_angle:'Angle position',
+    month_overview:'Aperçu mensuel', local:'Local', location:'Localisation',
+    astronomical_year:'ANNÉE ASTRONOMIQUE',
+    gps_sync:'SYNC GPS...', gps_denied:'Permission refusée',
+    gps_unavailable:'GPS non disponible', gps_timeout:'GPS timeout...',
+    accuracy:'Précision', all_pages:'Toutes les pages',
+    fav_hint:'Appui long pour ajouter aux favoris',
+    confirm_reset:'Effacer tous les réglages?',
+    settings_title:'Réglages', lang_setting:'Langue',
+    time_fmt:'Format heure', coord_fmt:'Coordonnées',
+    temp_unit:'Température', voice_on:'Sortie vocale',
+    voice_desc:'Web Speech API', voice_speed:'Vitesse voix',
+    home_port:'Port d\'attache', data:'Données',
+    reset:'Réinitialiser tous les réglages',
+    favs_manage:'Gérer les favoris',
+    fav_info:'Max 4 favoris · Accueil toujours présent',
+    units:'Unités', wait_gps:'En attente du GPS...',
+    day:'JOUR', rise:'LEVER', noon:'MIDI', set:'COUCHER',
+    golden_m:'Heure dorée (lever)', golden_e:'Heure dorée (coucher)',
+    set_home:'📍 Définir port d\'attache',
+    poi:'Lieux', poi_title:'Lieux enregistrés',
+    poi_add:'Ajouter position actuelle', poi_empty:'Aucun lieu enregistré.',
+    poi_hint:'Appuyez sur + pour ajouter votre position.',
+    poi_name_prompt:'Nom de ce lieu:',
+    poi_no_gps:'Pas de fix GPS disponible.',
+    poi_delete_confirm:'Supprimer ce lieu?',
+    poi_fetching:'Récupération adresse...',
+    weer:'Météo', weer_title:'Bulletin météo', weer_refresh:'Actualiser',
+    weer_loading:'Récupération météo...', weer_no_gps:'Pas de fix GPS.',
+    weer_error:'Échec récupération météo.', weer_updated:'Mis à jour à',
+    feels:'Ressenti', humidity:'Humidité',
+    temp_min:'Min', temp_max:'Max', wind:'Vent',
+    pressure:'Pression', clouds:'Nébulosité', rain:'Précipitations',
+    no_rain:'Pas de précipitations', w_sunrise:'Lever du soleil', w_sunset:'Coucher du soleil',
+    slow:'Lent', normal:'Normal', fast:'Rapide',
+    phase_names:['NOUVELLE LUNE','PREMIER CROISSANT','PREMIER QUARTIER','LUNE GIBBEUSE CROISSANTE',
+                 'PLEINE LUNE','LUNE GIBBEUSE DÉCROISSANTE','DERNIER QUARTIER','DERNIER CROISSANT'],
+    months:['Janvier','Février','Mars','Avril','Mai','Juin',
+            'Juillet','Août','Septembre','Octobre','Novembre','Décembre'],
+  }
+};
+const t = key => I18N[SETTINGS.lang]?.[key] ?? I18N.nl[key] ?? key;
+
+function applyI18n(){
+  const pairs = [
+    ['lbl-all-pages','all_pages'],['lbl-fav-hint','fav_hint'],
+    ['lbl-solar-time','solar_time'],['lbl-golden','golden_hour'],
+    ['lbl-uv','uv_danger'],['lbl-daylight',null],['lbl-night',null],
+    ['lbl-local','local'],['lbl-location','location'],
+    ['lbl-solar-eph','solar_time'],['lbl-solar-noon','solar_noon'],
+    ['lbl-rise','sunrise'],['lbl-set','sunset'],
+    ['lbl-gold-m','golden_m'],['lbl-gold-e','golden_e'],
+    ['lbl-uv-danger','uv_danger'],
+    ['lbl-moon-title','moon_phase'],['lbl-moon-rise','moon_rise'],
+    ['lbl-moon-set','moon_set'],['lbl-illum','illumination'],
+    ['lbl-pos-angle','pos_angle'],['lbl-age','moon_age'],['lbl-segment','moon_segment'],
+    ['lbl-month-overview','month_overview'],
+    ['th-day','day'],['th-rise','rise'],['th-noon','noon'],['th-set','set'],
+    ['lbl-config-title','settings_title'],['lbl-lang-setting','lang_setting'],
+    ['lbl-time-fmt','time_fmt'],['lbl-coord-fmt','coord_fmt'],
+    ['lbl-temp-unit','temp_unit'],['lbl-voice-on','voice_on'],
+    ['lbl-voice-desc','voice_desc'],['lbl-voice-speed','voice_speed'],
+    ['lbl-cfg-home','home_port'],['lbl-cfg-favs','favs_manage'],
+    ['lbl-fav-info','fav_info'],['lbl-cfg-data','data'],
+    ['lbl-hp-name',null],['lbl-hp-offset',null],
+    ['lbl-cfg-units','units'],['lbl-cfg-voice','voice_on'],
+    ['lbl-cfg-lang',null],
+  ];
+  pairs.forEach(([id,key])=>{
+    const el = document.getElementById(id);
+    if(el && key) el.innerText = t(key);
+  });
+  const dLight = document.getElementById('lbl-daylight');
+  if(dLight) dLight.innerText = SETTINGS.lang==='fr'?'Lumière du jour':SETTINGS.lang==='en'?'Daylight':'Normaal Daglicht';
+  const nEl = document.getElementById('lbl-night');
+  if(nEl) nEl.innerText = SETTINGS.lang==='fr'?'Nuit':SETTINGS.lang==='en'?'Night':'Nacht';
+  const hpEl = document.getElementById('lbl-hp-name');
+  if(hpEl) hpEl.innerText = SETTINGS.lang==='fr'?'Nom':SETTINGS.lang==='en'?'Name':'Naam';
+  const hpO = document.getElementById('lbl-hp-offset');
+  if(hpO) hpO.innerText = SETTINGS.lang==='fr'?'Décalage UTC':SETTINGS.lang==='en'?'UTC Offset':'UTC Offset';
+  const btnHome = document.getElementById('btn-set-home');
+  if(btnHome) btnHome.innerText = t('set_home');
+  const btnReset = document.getElementById('btn-reset');
+  if(btnReset) btnReset.innerText = '🗑 ' + t('reset');
+  const spd = document.getElementById('vr-slow');
+  if(spd) spd.innerText = t('slow');
+  const spn = document.getElementById('vr-normal');
+  if(spn) spn.innerText = t('normal');
+  const spf = document.getElementById('vr-fast');
+  if(spf) spf.innerText = t('fast');
+  rebuildFavManage();
+  // POI labels bijwerken als pagina zichtbaar
+  if(currentPage==='poi') initPOIPage();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LAAG 1 — PAGINAREGISTER
+// ═══════════════════════════════════════════════════════════════
+const PAGES = [
+  {id:'home',   icon:'🏠', labelKey:'home',   viewId:'view-home',   alwaysFav:true},
+  {id:'solar',  icon:'☀️', labelKey:'solar',  viewId:'view-solar'},
+  {id:'lunar',  icon:'🌙', labelKey:'lunar',  viewId:'view-lunar'},
+  {id:'log',    icon:'📅', labelKey:'log',    viewId:'view-log'},
+  {id:'config', icon:'⚙️', labelKey:'config', viewId:'view-config'},
+  {id:'info',   icon:'ℹ️', labelKey:'info',   viewId:'view-info'},
+  {id:'poi',    icon:'❤️', labelKey:'poi',    viewId:'view-poi'},
+  {id:'weer',   icon:'🌤️', labelKey:'weer',   viewId:'view-weer'},
+];
+const LAUNCHER_PAGE = {id:'launcher', icon:'⊞', labelKey:'launcher', viewId:'view-launcher'};
+
+// ═══════════════════════════════════════════════════════════════
+//  LAAG 2 — ROUTER
+// ═══════════════════════════════════════════════════════════════
+let currentPage = 'home';
+
+function showPage(id){
+  // hide all views
+  document.querySelectorAll('.view, #view-log').forEach(v=>{
+    v.classList.remove('active');
+  });
+  // show target
+  const target = document.getElementById(
+    id === 'launcher' ? 'view-launcher' :
+    (PAGES.find(p=>p.id===id)||{viewId:'view-home'}).viewId
+  );
+  if(target) target.classList.add('active');
+  currentPage = id;
+  updateFavBarActive();
+  if(id==='log') generateLog();
+  if(id==='poi') initPOIPage();
+  if(id==='weer'){ initWeerPage(); fetchWeer(); }
+  if(id==='config') refreshConfigDisplay();
+  if(id==='home') { resizeArc(); drawArc(); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LAAG 3 — FAVORIETENBALK
+// ═══════════════════════════════════════════════════════════════
+function getFavs(){
+  // always home first, then up to 3 more
+  const stored = SETTINGS.favorites || [];
+  const others = stored.filter(id=>id!=='home').slice(0,3);
+  return ['home',...others];
+}
+
+function rebuildFavBar(){
+  const bar = document.getElementById('fav-bar');
+  const favs = getFavs();
+  const cols = favs.length + 1; // +1 for launcher button
+  bar.style.gridTemplateColumns = `repeat(${cols},1fr)`;
+  bar.innerHTML = '';
+  favs.forEach(id=>{
+    const pg = PAGES.find(p=>p.id===id);
+    if(!pg) return;
+    const div = document.createElement('div');
+    div.className = 'fav-item' + (currentPage===id?' active':'');
+    div.innerHTML = `<div class="fav-icon">${pg.icon}</div><div>${t(pg.labelKey)}</div>`;
+    div.onclick = ()=>showPage(id);
+    bar.appendChild(div);
+  });
+  // launcher button
+  const launcher = document.createElement('div');
+  launcher.className = 'fav-item fav-launcher' + (currentPage==='launcher'?' active':'');
+  launcher.innerHTML = `<div class="fav-icon">⊞</div><div>${t('launcher')}</div>`;
+  launcher.onclick = ()=>showPage('launcher');
+  bar.appendChild(launcher);
+}
+
+function updateFavBarActive(){
+  document.querySelectorAll('.fav-item').forEach(el=>{
+    el.classList.remove('active');
+  });
+  document.querySelectorAll('.fav-item').forEach(el=>{
+    const label = el.querySelector('div:last-child')?.innerText?.toLowerCase();
+    const pageLabel = t(currentPage==='launcher'?'launcher':(PAGES.find(p=>p.id===currentPage)||{labelKey:''}).labelKey).toLowerCase();
+    if(label === pageLabel) el.classList.add('active');
+  });
+  rebuildFavBar();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LAUNCHER GRID
+// ═══════════════════════════════════════════════════════════════
+function rebuildLauncher(){
+  const grid = document.getElementById('launcher-grid');
+  grid.innerHTML = '';
+  const favs = getFavs();
+  PAGES.forEach(pg=>{
+    const isFav = favs.includes(pg.id);
+    const tile = document.createElement('div');
+    tile.className = 'launcher-tile' + (isFav?' fav-marked':'');
+    tile.innerHTML = `
+      <div class="launcher-icon">${pg.icon}</div>
+      <div class="launcher-label">${t(pg.labelKey)}</div>
+      <div class="launcher-fav-dot"></div>
+    `;
+    tile.onclick = ()=>showPage(pg.id);
+    // long press to toggle fav
+    let pressTimer;
+    tile.addEventListener('touchstart',()=>{
+      pressTimer = setTimeout(()=>toggleFav(pg.id, tile), 600);
+    });
+    tile.addEventListener('touchend',()=>clearTimeout(pressTimer));
+    tile.addEventListener('touchmove',()=>clearTimeout(pressTimer));
+    grid.appendChild(tile);
+  });
+  const hint = document.getElementById('lbl-fav-hint');
+  if(hint) hint.innerText = t('fav_hint');
+  const title = document.getElementById('lbl-all-pages');
+  if(title) title.innerText = t('all_pages');
+}
+
+function toggleFav(id, tile){
+  if(id==='home') return; // home is always fav
+  const favs = SETTINGS.favorites || [];
+  if(favs.includes(id)){
+    SETTINGS.favorites = favs.filter(f=>f!==id);
+  } else {
+    const current = favs.filter(f=>f!=='home');
+    if(current.length >= 3){
+      speak(SETTINGS.lang==='fr'?'Maximum atteint':SETTINGS.lang==='en'?'Maximum reached':'Maximum bereikt');
+      return;
+    }
+    SETTINGS.favorites = [...favs, id];
+  }
+  saveSettings();
+  rebuildFavBar();
+  rebuildLauncher();
+  rebuildFavManage();
+}
+
+function rebuildFavManage(){
+  const list = document.getElementById('fav-manage-list');
+  if(!list) return;
+  list.innerHTML = '';
+  const favs = getFavs();
+  PAGES.forEach(pg=>{
+    const isFav = favs.includes(pg.id);
+    const row = document.createElement('div');
+    row.className = 'setting-row';
+    row.style.padding = '8px 12px';
+    const isHome = pg.id === 'home';
+    row.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:1.1rem;">${pg.icon}</span>
+        <div class="setting-label">${t(pg.labelKey)}</div>
+        ${isHome?'<span style="font-size:0.5rem;color:var(--muted);margin-left:4px;">●</span>':''}
+      </div>
+      <div class="seg-ctrl">
+        <button class="seg-btn${isFav?' active':''}"
+          onclick="toggleFavBtn('${pg.id}',this)"
+          ${isHome?'disabled':''}>
+          ${isFav?(SETTINGS.lang==='fr'?'OUI':SETTINGS.lang==='en'?'ON':'AAN'):(SETTINGS.lang==='fr'?'NON':SETTINGS.lang==='en'?'OFF':'UIT')}
+        </button>
+      </div>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function toggleFavBtn(id, btn){
+  if(id==='home') return;
+  const favs = SETTINGS.favorites || [];
+  if(favs.includes(id)){
+    SETTINGS.favorites = favs.filter(f=>f!==id);
+    btn.classList.remove('active');
+    btn.innerText = SETTINGS.lang==='fr'?'NON':SETTINGS.lang==='en'?'OFF':'UIT';
+  } else {
+    const current = (SETTINGS.favorites||[]).filter(f=>f!=='home');
+    if(current.length >= 3) return;
+    SETTINGS.favorites = [...favs, id];
+    btn.classList.add('active');
+    btn.innerText = SETTINGS.lang==='fr'?'OUI':SETTINGS.lang==='en'?'ON':'AAN';
+  }
+  saveSettings();
+  rebuildFavBar();
+  rebuildLauncher();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SPRAAK
+// ═══════════════════════════════════════════════════════════════
+const VOICE_LANG = {nl:'nl-BE', en:'en-GB', fr:'fr-FR'};
+function speak(text){
+  if(!SETTINGS.voice) return;
+  if(!window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = VOICE_LANG[SETTINGS.lang] || 'nl-BE';
+  u.rate = SETTINGS.voiceRate || 1.0;
+  speechSynthesis.speak(u);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FORMATTERS
+// ═══════════════════════════════════════════════════════════════
+function formatTime(mins, withSeconds){
+  const tz = -(new Date().getTimezoneOffset());
+  let t2 = (mins + tz + 1440) % 1440;
+  const h = Math.floor(t2/60) % 24;
+  const m = Math.floor(t2%60);
+  const s = Math.floor((t2*60)%60);
+  if(SETTINGS.timeFormat === '12h'){
+    const ampm = h>=12?'PM':'AM';
+    const h12 = h%12||12;
+    return h12+':'+(String(m).padStart(2,'0'))+(withSeconds?':'+String(s).padStart(2,'0'):'')+' '+ampm;
+  }
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+(withSeconds?':'+String(s).padStart(2,'0'):'');
+}
+
+function formatCoord(lat, lng){
+  if(SETTINGS.coordFormat === 'DD'){
+    return lat.toFixed(5)+'N '+lng.toFixed(5)+'E';
+  }
+  if(SETTINGS.coordFormat === 'DMS'){
+    const toDMS = (v, pos, neg) => {
+      const d=Math.floor(Math.abs(v)), m2=Math.floor((Math.abs(v)-d)*60);
+      const s2=(((Math.abs(v)-d)*60)-m2)*60;
+      return d+'°'+String(m2).padStart(2,'0')+'\''+s2.toFixed(1)+'"'+(v>=0?pos:neg);
+    };
+    return toDMS(lat,'N','S')+' '+toDMS(lng,'E','W');
+  }
+  if(SETTINGS.coordFormat === 'DDM'){
+    const toDDM = (v, pos, neg) => {
+      const d=Math.floor(Math.abs(v)), m2=((Math.abs(v)-d)*60);
+      return d+'°'+m2.toFixed(4)+'\''+' '+(v>=0?pos:neg);
+    };
+    return toDDM(lat,'N','S')+' '+toDDM(lng,'E','W');
+  }
+  return lat.toFixed(5)+'N '+lng.toFixed(5)+'E';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ASTRONOMISCHE BEREKENINGEN
+// ═══════════════════════════════════════════════════════════════
+function calcSun(date,iLat,iLng){
+  const doy=Math.floor((date-new Date(date.getFullYear(),0,0))/86400000);
+  const b=(2*Math.PI/365)*(doy-81);
+  const eot=9.87*Math.sin(2*b)-7.53*Math.cos(b)-1.5*Math.sin(b);
+  const decl=23.45*Math.sin((Math.PI/180)*(360/365)*(doy-81));
+  const latR=iLat*(Math.PI/180),declR=decl*(Math.PI/180);
+  const cosH=(Math.sin(-0.83*Math.PI/180)-Math.sin(latR)*Math.sin(declR))/(Math.cos(latR)*Math.cos(declR));
+  let rise=0,set=0;
+  if(cosH<=1&&cosH>=-1){const h0=Math.acos(cosH)*(180/Math.PI);rise=720-4*(iLng+h0)-eot;set=720-4*(iLng-h0)-eot;}
+  return{rise,set,noon:720-(iLng*4)-eot,eot,decl};
+}
+
+function calcGoldenDurMins(iLat,decl){
+  const latR=iLat*(Math.PI/180),declR=decl*(Math.PI/180);
+  const cosH0=(Math.sin(-0.83*Math.PI/180)-Math.sin(latR)*Math.sin(declR))/(Math.cos(latR)*Math.cos(declR));
+  const cosHG=(Math.sin(6*Math.PI/180)-Math.sin(latR)*Math.sin(declR))/(Math.cos(latR)*Math.cos(declR));
+  if(isNaN(cosHG)||cosHG>1||cosHG<-1||isNaN(cosH0)||cosH0>1||cosH0<-1)return 0;
+  return Math.abs(4*(Math.acos(cosH0)-Math.acos(cosHG))*(180/Math.PI));
+}
+
+function calcUVDangerMins(lat, decl, noon, eot, lng){
+  const D2R = Math.PI/180;
+  const latR=lat*D2R, declR=decl*D2R;
+  const cosH = (Math.sin(45*D2R)-Math.sin(latR)*Math.sin(declR))/(Math.cos(latR)*Math.cos(declR));
+  if(isNaN(cosH)||cosH>1||cosH<-1) return{start:noon,end:noon};
+  const H = Math.acos(cosH)*(180/Math.PI);
+  return {start: noon-4*H, end: noon+4*H};
+}
+
+function homePortOffset(now){
+  if(SETTINGS.homePortOffset !== null) return SETTINGS.homePortOffset;
+  const m = now.getMonth()+1, d = now.getDate();
+  const lastSun = (mo, yr) => {
+    const last = new Date(yr,mo,0);
+    last.setDate(last.getDate()-last.getDay());
+    return last;
+  };
+  const dstStart = lastSun(4, now.getFullYear());
+  const dstEnd   = lastSun(11, now.getFullYear());
+  return now >= dstStart && now < dstEnd ? 2 : 1;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ARC CANVAS
+// ═══════════════════════════════════════════════════════════════
+const arcCanvas = document.getElementById('arc-canvas');
+const arcCtx    = arcCanvas.getContext('2d');
+const SEGS      = 220;
+let arcRiseMins=375, arcSetMins=1263, arcNowMins=720, arcNoonMins=720;
+let arcGoldDur=40, arcUVStart=680, arcUVEnd=760;
+
+function resizeArc(){
+  const wrap = document.getElementById('arc-wrap');
+  if(!wrap) return;
+  const W   = wrap.clientWidth;
+  const H   = Math.round(W*0.68);
+  const dpr = window.devicePixelRatio||1;
+  arcCanvas.width       = W*dpr;
+  arcCanvas.height      = H*dpr;
+  arcCanvas.style.height= H+'px';
+  arcCtx.scale(dpr,dpr);
+}
+
+function arcPoint(t,W,CX,CY,RX,RY){
+  const a = Math.PI + t*Math.PI;
+  return {x: CX+RX*Math.cos(a), y: CY+RY*Math.sin(a)};
+}
+
+function segmentColor(m,rise,set,gd,uvS,uvE,isDimmed){
+  if(m<rise||m>set)     return '#2a2a22';
+  if(m>=rise&&m<=rise+gd) return isDimmed?'#2255cc':'#4488ff';
+  if(m>=set-gd&&m<=set)   return isDimmed?'#2255cc':'#4488ff';
+  if(m>=uvS&&m<=uvE)      return isDimmed?'#991111':'#ff3333';
+  return isDimmed?'#997700':'#ffdd00';
+}
+
+function fmtMins(totalMins){
+  let m=Math.round(totalMins);
+  const h=Math.floor(m/60)%24, mn=Math.floor(m%60);
+  return String(h).padStart(2,'0')+':'+String(mn<0?0:mn).padStart(2,'0');
+}
+
+function drawArc(){
+    const dpr=window.devicePixelRatio||1,W=arcCanvas.width/dpr,H=arcCanvas.height/dpr;
+    arcCtx.clearRect(0,0,W,H);
+    const CX=W/2,CY=H*0.88,RX=W*0.43,RY=H*0.72;
+    const rise=arcRiseMins,set=arcSetMins,nowM=arcNowMins,noon=arcNoonMins,dayLen=set-rise;
+    const prog=Math.max(0,Math.min(1,(nowM-rise)/dayLen));
+    const isDaytime=nowM>=rise&&nowM<=set;
+    const marg=W*0.05;
+    const fs=Math.max(9,W*0.025);
+
+    // 1. SEGMENTEN met kleuren langs elliptische boog
+    for(let i=0;i<SEGS;i++){
+        const t0=i/SEGS,t1=(i+1)/SEGS,midT=(t0+t1)/2;
+        const p0=arcPoint(t0,W,CX,CY,RX,RY),p1=arcPoint(t1,W,CX,CY,RX,RY);
+        arcCtx.beginPath();arcCtx.moveTo(p0.x,p0.y);arcCtx.lineTo(p1.x,p1.y);
+        arcCtx.lineWidth=isDaytime&&midT<=prog?4.5:3;
+        arcCtx.lineCap='round';
+        arcCtx.strokeStyle=segmentColor(rise+midT*dayLen,rise,set,arcGoldDur,arcUVStart,arcUVEnd,isDaytime&&midT<=prog);
+        arcCtx.stroke();
+    }
+
+    // 2. GELE GLOED onder doorlopen boog
+    if(isDaytime&&prog>0.005){
+        arcCtx.save();
+        arcCtx.beginPath();arcCtx.rect(0,0,W,CY);arcCtx.clip();
+        arcCtx.beginPath();
+        const pS=arcPoint(0,W,CX,CY,RX,RY);arcCtx.moveTo(pS.x,pS.y);
+        const steps=Math.round(prog*SEGS);
+        for(let i=1;i<=steps;i++){const p=arcPoint(i/SEGS,W,CX,CY,RX,RY);arcCtx.lineTo(p.x,p.y);}
+        const pN=arcPoint(prog,W,CX,CY,RX,RY);
+        arcCtx.lineTo(pN.x,CY);arcCtx.lineTo(pS.x,CY);arcCtx.closePath();
+        const gr=arcCtx.createLinearGradient(0,CY-RY,0,CY);
+        gr.addColorStop(0,'rgba(255,157,47,0.3)');gr.addColorStop(1,'rgba(255,157,47,0.0)');
+        arcCtx.fillStyle=gr;arcCtx.fill();arcCtx.restore();
+    }
+
+    // 3. HORIZON stippellijn
+    arcCtx.save();
+    arcCtx.globalAlpha=0.5;arcCtx.setLineDash([6,5]);
+    arcCtx.beginPath();arcCtx.moveTo(marg,CY);arcCtx.lineTo(W-marg,CY);
+    arcCtx.strokeStyle='#666655';arcCtx.lineWidth=1.5;arcCtx.stroke();
+    arcCtx.restore();
+
+    // 4. OPKOMST label (links, onder horizon)
+    const rPt=arcPoint(0,W,CX,CY,RX,RY);
+    const sPt=arcPoint(1,W,CX,CY,RX,RY);
+    arcCtx.save();
+    arcCtx.setLineDash([]);
+    arcCtx.textAlign='center';
+    // opkomst tijd
+    arcCtx.font='bold '+fs+"px 'Courier New',monospace";
+    arcCtx.fillStyle='#ff9d2f';
+    arcCtx.fillText(fmtMins(rise),rPt.x,CY+fs*1.6);
+    arcCtx.font=(fs*0.82)+"px 'Courier New',monospace";
+    arcCtx.fillStyle='#444';
+    arcCtx.fillText('OPKOMST',rPt.x,CY+fs*2.8);
+    // ondergang tijd
+    arcCtx.font='bold '+fs+"px 'Courier New',monospace";
+    arcCtx.fillStyle='#ff9d2f';
+    arcCtx.fillText(fmtMins(set),sPt.x,CY+fs*1.6);
+    arcCtx.font=(fs*0.82)+"px 'Courier New',monospace";
+    arcCtx.fillStyle='#444';
+    arcCtx.fillText('ONDERGANG',sPt.x,CY+fs*2.8);
+    arcCtx.restore();
+
+    // 5. NOON — verticaal streepje + middagtijd + daglengte
+    arcCtx.save();
+    arcCtx.setLineDash([]);
+    arcCtx.strokeStyle='rgba(255,255,255,0.5)';
+    arcCtx.lineWidth=1.5;
+    arcCtx.beginPath();arcCtx.moveTo(CX,CY-8);arcCtx.lineTo(CX,CY+8);arcCtx.stroke();
+    arcCtx.font=Math.max(8,W*0.02)+"px 'Courier New',monospace";
+    arcCtx.fillStyle='#666';arcCtx.textAlign='center';
+    arcCtx.fillText(fmtMins(noon),CX,CY+fs*1.3);
+    arcCtx.restore();
+    const dlFs=Math.max(8,W*0.022);
+    arcCtx.save();
+    arcCtx.setLineDash([]);
+    arcCtx.font=dlFs+"px 'Courier New',monospace";
+    arcCtx.fillStyle='rgba(255,157,47,0.75)';arcCtx.textAlign='center';
+    arcCtx.fillText('DAGLENGTE  '+Math.floor(dayLen/60)+'u '+Math.floor(dayLen%60).toString().padStart(2,'0')+'m',CX,CY+fs*1.3+dlFs*1.8);
+    arcCtx.restore();
+
+    // 6. ZON ICOON op de boog
+    const sunT=isDaytime?prog:(nowM<rise?0:1);
+    const sunPt=arcPoint(sunT,W,CX,CY,RX,RY),sx=sunPt.x,sy=sunPt.y;
+    const bodyR=Math.max(7,W*0.016),rayR=bodyR+Math.max(4,W*0.009);
+    arcCtx.save();
+    arcCtx.setLineDash([]);
+    arcCtx.globalAlpha=isDaytime?1.0:0.22;
+    // gloed ring
+    arcCtx.beginPath();arcCtx.arc(sx,sy,rayR+5,0,Math.PI*2);
+    arcCtx.fillStyle='rgba(255,157,47,0.18)';arcCtx.fill();
+    // stralen
+    arcCtx.strokeStyle='#ff9d2f';arcCtx.lineWidth=1.6;arcCtx.lineCap='round';
+    for(let r=0;r<8;r++){
+        const a=r*Math.PI/4;
+        arcCtx.beginPath();
+        arcCtx.moveTo(sx+Math.cos(a)*(bodyR+2),sy+Math.sin(a)*(bodyR+2));
+        arcCtx.lineTo(sx+Math.cos(a)*rayR,sy+Math.sin(a)*rayR);
+        arcCtx.stroke();
+    }
+    // zon schijf
+    arcCtx.beginPath();arcCtx.arc(sx,sy,bodyR,0,Math.PI*2);
+    arcCtx.fillStyle='#ff9d2f';arcCtx.fill();
+    arcCtx.restore();
+
+    // 7. TIJDSLABEL — altijd horizontaal, altijd boven het zonnetje
+    if(isDaytime){
+        const lblY = sy - rayR - 10;
+        arcCtx.save();
+        arcCtx.setLineDash([]);
+        arcCtx.font='bold '+Math.max(10,W*0.028)+"px 'Courier New',monospace";
+        arcCtx.fillStyle='#00ff00';
+        arcCtx.textAlign='center';arcCtx.textBaseline='bottom';
+        arcCtx.fillText(fmtMins(nowM),sx,lblY);
+        arcCtx.restore();
+        // voortgangspercentage
+        arcCtx.save();
+        arcCtx.setLineDash([]);
+        arcCtx.font=Math.max(8,W*0.02)+"px 'Courier New',monospace";
+        arcCtx.fillStyle='#ff9d2f';arcCtx.textAlign='right';
+        arcCtx.fillText(Math.round(prog*100)+'%',W-marg,Math.max(12,H*0.18));
+        arcCtx.restore();
+    }
+
+    // 8. DAG/NACHT label links
+    arcCtx.save();
+    arcCtx.setLineDash([]);
+    arcCtx.font=Math.max(8,W*0.02)+"px 'Courier New',monospace";
+    arcCtx.fillStyle=isDaytime?'#ff9d2f':'#333';arcCtx.textAlign='left';
+    arcCtx.fillText(isDaytime?'DAG':'NACHT',marg,Math.max(12,H*0.18));
+    arcCtx.restore();
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+//  HOOFD UPDATE LOOP
+// ═══════════════════════════════════════════════════════════════
+let lat=null, lng=null, lastAccuracy=999;
+let lastAddressLat=0, lastAddressLng=0;
+const moveThreshold=0.002;
+let addressResetTimer=null;
+
+function update(){
+  const now = new Date();
+  document.getElementById('utc-time').innerText =
+    now.toUTCString().slice(17,25);
+  document.getElementById('local-time').innerText =
+    now.toLocaleTimeString(SETTINGS.lang==='fr'?'fr-BE':SETTINGS.lang==='en'?'en-GB':'nl-BE');
+  document.getElementById('date-display').innerText =
+    now.toLocaleDateString(SETTINGS.lang==='fr'?'fr-BE':SETTINGS.lang==='en'?'en-GB':'nl-BE',
+      {weekday:'long',day:'numeric',month:'long',year:'numeric'}).toUpperCase();
+  document.getElementById('year-display').innerText =
+    t('astronomical_year') + ' ' + now.getFullYear();
+  document.getElementById('zone-display').innerText =
+    'UTC' + (now.getTimezoneOffset()<0?'+':'-') +
+    Math.abs(now.getTimezoneOffset()/60);
+
+  if(lat===null) return;
+
+  const tz = -now.getTimezoneOffset();
+  const s  = calcSun(now, lat, lng);
+  const utcMins = now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
+  let sMins = (utcMins + lng*4 + s.eot + 1440) % 1440;
+
+  document.getElementById('solar-time').innerText =
+    [Math.floor(sMins/60),Math.floor(sMins%60),Math.floor((sMins*60)%60)]
+    .map(v=>String(v).padStart(2,'0')).join(':');
+  document.getElementById('solar-diff').innerText = 'EOT: '+s.eot.toFixed(2)+' MIN';
+
+  const fmtT=(mi)=>{let tt=(mi+tz+1440)%1440;return Math.floor(tt/60).toString().padStart(2,'0')+':'+Math.floor(tt%60).toString().padStart(2,'0');};
+  document.getElementById('val-noon').innerText = fmtT(s.noon);
+  document.getElementById('out-rise').innerText = fmtT(s.rise);
+  document.getElementById('out-set').innerText  = fmtT(s.set);
+
+  const gDur = Math.round(calcGoldenDurMins(lat, s.decl));
+  document.getElementById('out-gold-morning').innerText = fmtT(s.rise);
+  document.getElementById('dur-gold-morning').innerText = gDur + ' min';
+  document.getElementById('out-gold-evening').innerText = fmtT(s.set - gDur);
+  document.getElementById('dur-gold-evening').innerText = gDur + ' min';
+
+  const uv = calcUVDangerMins(lat, s.decl, s.noon, s.eot, lng);
+  document.getElementById('uv-start').innerText = fmtT(uv.start);
+  document.getElementById('uv-end').innerText   = fmtT(uv.end);
+
+  // moon
+  const lp=2551443.3, nm=new Date(1970,0,7,20,35,0);
+  const pSecs=((now.getTime()-nm.getTime())/1000)%lp;
+  const mDeg=(pSecs/lp)*360;
+  const illum=(1-Math.cos(mDeg*Math.PI/180))/2*100;
+  const pIdx=Math.floor(((mDeg+22.5)%360)/45);
+  const ics=['🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘'];
+  document.getElementById('moon-icon').innerHTML = ics[pIdx];
+  document.getElementById('moon-phase-name').innerText = t('phase_names')[pIdx]||'--';
+  document.getElementById('moon-illum').innerText = illum.toFixed(1)+'%';
+  document.getElementById('moon-deg').innerText   = mDeg.toFixed(1)+'°';
+  document.getElementById('moon-age').innerText   = (pSecs/86400).toFixed(1);
+  document.getElementById('moon-phase-num').innerText = (pIdx+1)+'/8';
+  const mOff=(pSecs/lp)*24*60;
+  document.getElementById('moon-rise').innerText  = fmtT(s.rise+mOff);
+  document.getElementById('moon-set').innerText   = fmtT(s.set+mOff);
+
+  // home port
+  const hpOff = homePortOffset(now);
+  const hpDate = new Date(now.getTime()+now.getTimezoneOffset()*60000+hpOff*3600000);
+  document.getElementById('home-port-time').innerText =
+    hpDate.toLocaleTimeString(SETTINGS.lang==='fr'?'fr-BE':SETTINGS.lang==='en'?'en-GB':'nl-BE',{hour12:false});
+  document.getElementById('home-port-status').innerText =
+    hpOff===2?'CEST (UTC+2)':'CET (UTC+1)';
+
+  // arc
+  arcGoldDur  = gDur;
+  arcUVStart  = uv.start + tz;
+  arcUVEnd    = uv.end   + tz;
+  arcRiseMins = s.rise   + tz;
+  arcSetMins  = s.set    + tz;
+  arcNoonMins = s.noon   + tz;
+  arcNowMins  = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
+  drawArc();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LOG
+// ═══════════════════════════════════════════════════════════════
+function generateLog(){
+  if(lat===null) return;
+  const b = document.getElementById('log-body');
+  b.innerHTML = '';
+  const now=new Date(), y=now.getFullYear(), mo=now.getMonth();
+  const ld = new Date(y,mo+1,0).getDate();
+  const months = t('months');
+  document.getElementById('log-month-year').innerText = months[mo]+' '+y;
+  const locale = SETTINGS.lang==='fr'?'fr-BE':SETTINGS.lang==='en'?'en-GB':'nl-BE';
+  for(let d=1;d<=ld;d++){
+    const dt=new Date(y,mo,d,12,0,0), sl=calcSun(dt,lat,lng);
+    const r=document.createElement('tr');
+    if(d===now.getDate()) r.className='today-row';
+    const dtz=-dt.getTimezoneOffset();
+    const f=m=>{
+      let t2=(m+dtz+1440)%1440;
+      const h=Math.floor(t2/60)%24,mn=Math.floor(t2%60);
+      return String(h).padStart(2,'0')+':'+String(mn).padStart(2,'0');
+    };
+    r.innerHTML = '<td>'+d+' '+dt.toLocaleDateString(locale,{weekday:'short'})+'</td>'+
+      '<td>'+f(sl.rise)+'</td><td>'+f(sl.noon)+'</td><td>'+f(sl.set)+'</td>';
+    b.appendChild(r);
+  }
+  const tr=b.querySelector('.today-row');
+  if(tr) setTimeout(()=>tr.scrollIntoView({block:'center',behavior:'smooth'}),100);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  GPS
+// ═══════════════════════════════════════════════════════════════
+const GPS_OPTS = {enableHighAccuracy:true, timeout:10000, maximumAge:0};
+
+function onGpsSuccess(p){
+  const newLat=p.coords.latitude, newLng=p.coords.longitude, acc=p.coords.accuracy;
+  lastAccuracy = acc;
+  const dist=Math.sqrt(Math.pow(newLat-lastAddressLat,2)+Math.pow(newLng-lastAddressLng,2));
+  if(dist>moveThreshold && lastAddressLat!==0){
+    const addrDisp=document.getElementById('address-display');
+    if(!addressResetTimer) addressResetTimer=setTimeout(()=>{
+      if(addrDisp) addrDisp.innerHTML='<span style="color:orange">Locatie gewijzigd</span>';
+      addressResetTimer=null;
+    },5000);
+  } else {
+    if(addressResetTimer){clearTimeout(addressResetTimer);addressResetTimer=null;}
+  }
+  lat=newLat; lng=newLng;
+  document.getElementById('coords-display').innerText = formatCoord(lat,lng);
+  const accEl=document.getElementById('accuracy-display');
+  accEl.innerText='(±'+Math.round(acc)+'m)';
+  accEl.style.color=acc<25?'#4488ff':acc<100?'orange':'#ff0000';
+  const pulse=document.getElementById('gps-pulse');
+  if(pulse){pulse.style.background='var(--green)';pulse.classList.add('blink');}
+  update();
+}
+
+function onGpsError(e){
+  const msgs={1:t('gps_denied'),2:'GPS ERROR',3:t('gps_timeout')};
+  document.getElementById('coords-display').innerText = msgs[e.code]||'GPS ERROR';
+  document.getElementById('accuracy-display').innerText='';
+  document.getElementById('gps-pulse').style.background='#ff0000';
+  if(e.code===3) setTimeout(()=>navigator.geolocation.watchPosition(onGpsSuccess,onGpsError,GPS_OPTS),2000);
+}
+
+if(!navigator.geolocation){
+  document.getElementById('coords-display').innerText=t('gps_unavailable');
+} else {
+  navigator.geolocation.watchPosition(onGpsSuccess,onGpsError,GPS_OPTS);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ADRES LOOKUP
+// ═══════════════════════════════════════════════════════════════
+function manualAddressUpdate(){
+  if(lat===null) return;
+  const btn=document.getElementById('addr-btn');
+  const addrDisp=document.getElementById('address-display');
+  if(btn) btn.disabled=true;
+  addrDisp.innerHTML='<span style="color:var(--gold)">Adres ophalen...</span>';
+  fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14`,
+    {headers:{'Accept-Language':SETTINGS.lang}})
+  .then(r=>r.json())
+  .then(d=>{
+    const a=d.address||{};
+    const parts=[a.road,a.city||a.town||a.village,a.state,a.country].filter(Boolean);
+    addrDisp.innerText=parts.join(', ')||d.display_name||'Onbekend';
+    lastAddressLat=lat; lastAddressLng=lng;
+    document.getElementById('home-port-label').innerText=
+      a.city||a.town||a.village||t('home_port');
+    document.getElementById('home-port-city').innerText=
+      a.city||a.town||a.village||'';
+  })
+  .catch(()=>{addrDisp.innerText='Geen verbinding';})
+  .finally(()=>{if(btn)btn.disabled=false;});
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CONFIG HELPERS
+// ═══════════════════════════════════════════════════════════════
+function refreshConfigDisplay(){
+  document.getElementById('cfg-home-name').innerText   = SETTINGS.homePortName||'--';
+  document.getElementById('cfg-home-offset').innerText = SETTINGS.homePortOffset!==null?
+    'UTC+'+ SETTINGS.homePortOffset : 'AUTO (DST)';
+  document.getElementById('cfg-home-dst').innerText    = SETTINGS.homePortOffset===null?
+    (SETTINGS.lang==='fr'?'Automatique':SETTINGS.lang==='en'?'Automatic':'Automatisch'):'Manuel';
+  rebuildFavManage();
+  // sync seg buttons to current settings
+  syncSegBtn('timeFormat', SETTINGS.timeFormat);
+  syncSegBtn('coordFormat', SETTINGS.coordFormat);
+  syncSegBtn('tempUnit', SETTINGS.tempUnit);
+  syncSegBtn('voiceRate', String(SETTINGS.voiceRate));
+  syncVoiceBtn(SETTINGS.voice);
+  syncLangBtn(SETTINGS.lang);
+}
+
+function syncSegBtn(key, val){
+  document.querySelectorAll(`[onclick*="setUnit('${key}'"]`).forEach(b=>{
+    b.classList.toggle('active', b.getAttribute('onclick').includes(`'${val}'`));
+  });
+}
+function syncVoiceBtn(on){
+  document.getElementById('voice-on-btn')?.classList.toggle('active', on);
+  document.getElementById('voice-off-btn')?.classList.toggle('active', !on);
+}
+function syncLangBtn(lang){
+  document.querySelectorAll('[onclick*="setLang"]').forEach(b=>{
+    b.classList.toggle('active', b.getAttribute('onclick').includes(`'${lang}'`));
+  });
+}
+
+function configureHomePort(){
+  const name = prompt(
+    SETTINGS.lang==='fr'?'Nom du port d\'attache:':
+    SETTINGS.lang==='en'?'Home port name:':
+    'Naam van thuishaven:', SETTINGS.homePortName||'');
+  if(name===null) return;
+  const off = prompt(
+    SETTINGS.lang==='fr'?'Décalage UTC (ex: 1 ou 2), vide = auto':
+    SETTINGS.lang==='en'?'UTC offset (e.g. 1 or 2), empty = auto':
+    'UTC offset (bv. 1 of 2), leeg = auto:', '');
+  SETTINGS.homePortName = name||SETTINGS.homePortName;
+  SETTINGS.homePortOffset = off===''||off===null?null:parseFloat(off);
+  saveSettings();
+  refreshConfigDisplay();
+  document.getElementById('home-port-label').innerText = name||t('home_port');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INFO TAAL TOGGLE
+// ═══════════════════════════════════════════════════════════════
+function switchInfoLang(lang, btn){
+  document.querySelectorAll('.info-lang-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.info-block').forEach(b=>b.classList.remove('active'));
+  document.getElementById('info-'+lang)?.classList.add('active');
+}
+
+
+
+// ═══════════════════════════════════════════════════════════════
+//  WEER — WEERBERICHT via OpenWeatherMap
+// ═══════════════════════════════════════════════════════════════
+const OWM_KEY = 'd0b9bca6c862134e4db9a09d7ec640fa';
+let weerData = null;
+
+function getBeaufort(kmh){
+  if(kmh<1)  return{scale:0,desc:{nl:'Stil',        en:'Calm',        fr:'Calme'}};
+  if(kmh<=5) return{scale:1,desc:{nl:'Zwak',        en:'Light air',   fr:'Très légère brise'}};
+  if(kmh<=11)return{scale:2,desc:{nl:'Zwak',        en:'Light breeze',fr:'Légère brise'}};
+  if(kmh<=19)return{scale:3,desc:{nl:'Matig',       en:'Gentle',      fr:'Petite brise'}};
+  if(kmh<=28)return{scale:4,desc:{nl:'Matig',       en:'Moderate',    fr:'Jolie brise'}};
+  if(kmh<=38)return{scale:5,desc:{nl:'Vrij krachtig',en:'Fresh',      fr:'Bonne brise'}};
+  if(kmh<=49)return{scale:6,desc:{nl:'Krachtig',    en:'Strong',      fr:'Vent frais'}};
+  if(kmh<=61)return{scale:7,desc:{nl:'Hard',        en:'Near gale',   fr:'Grand frais'}};
+  if(kmh<=74)return{scale:8,desc:{nl:'Stormachtig', en:'Gale',        fr:'Coup de vent'}};
+  if(kmh<=88)return{scale:9,desc:{nl:'Storm',       en:'Strong gale', fr:'Fort coup de vent'}};
+  if(kmh<=102)return{scale:10,desc:{nl:'Zware storm',en:'Storm',      fr:'Tempête'}};
+  if(kmh<=117)return{scale:11,desc:{nl:'Zeer zware storm',en:'Violent storm',fr:'Violente tempête'}};
+  return{scale:12,desc:{nl:'Orkaan',en:'Hurricane',fr:'Ouragan'}};
+}
+
+function weerSetStatus(msg, type){
+  const el = document.getElementById('weer-status');
+  if(!el) return;
+  el.style.display = 'block';
+  el.className = 'cfg-status ' + (type||'pending');
+  el.innerText = msg;
+}
+
+function weerShowMain(show){
+  const el = document.getElementById('weer-main');
+  if(el) el.style.display = show ? 'block' : 'none';
+}
+
+function initWeerPage(){
+  // i18n labels
+  const pairs = [
+    ['lbl-weer-title','weer_title'],['lbl-weer-refresh','weer_refresh'],
+    ['lbl-feels','feels'],['lbl-humidity','humidity'],
+    ['lbl-temp-min','temp_min'],['lbl-temp-max','temp_max'],
+    ['lbl-wind','wind'],['lbl-pressure','pressure'],
+    ['lbl-clouds','clouds'],['lbl-rain','rain'],
+    ['lbl-w-sunrise','w_sunrise'],['lbl-w-sunset','w_sunset'],
+  ];
+  pairs.forEach(([id,key])=>{
+    const el=document.getElementById(id);
+    if(el) el.innerText = t(key);
+  });
+  // Als we al data hebben, herteken zonder opnieuw op te halen
+  if(weerData) renderWeer(weerData);
+}
+
+function fetchWeer(){
+  if(lat===null){
+    weerSetStatus(t('weer_no_gps'), 'error');
+    weerShowMain(false);
+    return;
+  }
+  weerSetStatus(t('weer_loading'), 'pending');
+  weerShowMain(false);
+
+  const lang = SETTINGS.lang==='fr'?'fr':SETTINGS.lang==='en'?'en':'nl';
+  const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&units=metric&lang=${lang}&appid=${OWM_KEY}`;
+
+  fetch(url)
+    .then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); })
+    .then(data=>{
+      weerData = data;
+      document.getElementById('weer-status').style.display = 'none';
+      renderWeer(data);
+    })
+    .catch(()=>{
+      weerSetStatus(t('weer_error'), 'error');
+      weerShowMain(false);
+    });
+}
+
+function renderWeer(data){
+  const lang = SETTINGS.lang;
+  const useFahrenheit = SETTINGS.tempUnit === 'F';
+
+  const toUnit = c => useFahrenheit ? ((c*9/5)+32).toFixed(1)+'°F' : c.toFixed(1)+'°C';
+  const windKmh = (data.wind.speed * 3.6);
+  const bft = getBeaufort(windKmh);
+
+  // Temperaturen
+  document.getElementById('weer-temp').innerText   = toUnit(data.main.temp);
+  document.getElementById('weer-feels').innerText  = toUnit(data.main.feels_like);
+  document.getElementById('weer-min').innerText    = toUnit(data.main.temp_min);
+  document.getElementById('weer-max').innerText    = toUnit(data.main.temp_max);
+  document.getElementById('weer-humid').innerText  = data.main.humidity + '%';
+
+  // Omschrijving + icoon
+  document.getElementById('weer-desc').innerText  = data.weather[0].description;
+  document.getElementById('weer-city').innerText  = (data.name||'').toUpperCase();
+  const iconEl = document.getElementById('weer-icon');
+  iconEl.src = 'https://openweathermap.org/img/wn/'+data.weather[0].icon+'@2x.png';
+  iconEl.style.display = 'block';
+
+  // Wind
+  const windDisp = useFahrenheit
+    ? (data.wind.speed * 2.237).toFixed(1) + ' mph'
+    : windKmh.toFixed(1) + ' km/u';
+  document.getElementById('weer-wind-speed').innerText   = windDisp;
+  document.getElementById('weer-beaufort').innerText     = bft.scale + ' Bft';
+  document.getElementById('weer-beaufort-desc').innerText= bft.desc[lang]||bft.desc.nl;
+
+  // Druk / bewolking
+  document.getElementById('weer-pressure').innerText = data.main.pressure + ' hPa';
+  document.getElementById('weer-clouds').innerText   = (data.clouds?.all||0) + '%';
+
+  // Neerslag
+  const rain = data.rain?.['1h'] ? data.rain['1h'].toFixed(1)+' mm/u' : t('no_rain');
+  document.getElementById('weer-rain').innerText = rain;
+
+  // Zon — gebruik lokale tijdzone van het apparaat
+  const sunrise = new Date(data.sys.sunrise * 1000);
+  const sunset  = new Date(data.sys.sunset  * 1000);
+  const locale  = lang==='fr'?'fr-BE':lang==='en'?'en-GB':'nl-BE';
+  document.getElementById('weer-sunrise').innerText = sunrise.toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('weer-sunset').innerText  = sunset.toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit'});
+
+  // Timestamp
+  const now = new Date();
+  document.getElementById('weer-updated').innerText =
+    t('weer_updated')+' '+now.toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit'});
+
+  weerShowMain(true);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  POI — OPGESLAGEN PLAATSEN
+// ═══════════════════════════════════════════════════════════════
+function loadPOIs(){
+  try{ return JSON.parse(localStorage.getItem('zp_pois')||'[]'); }
+  catch(e){ return []; }
+}
+function savePOIs(pois){
+  localStorage.setItem('zp_pois', JSON.stringify(pois));
+}
+
+function poiAddCurrent(){
+  if(lat===null){ alert(t('poi_no_gps')); return; }
+  const name = prompt(t('poi_name_prompt'), '');
+  if(name===null) return;
+  const label = name.trim() || formatCoord(lat,lng);
+  const poi = {
+    id: Date.now(),
+    name: label,
+    lat: lat,
+    lng: lng,
+    address: '',
+    created: new Date().toISOString()
+  };
+  const pois = loadPOIs();
+  pois.unshift(poi);
+  savePOIs(pois);
+  renderPOIs();
+  // reverse geo op achtergrond
+  poiFetchAddress(poi.id, lat, lng);
+}
+
+function poiAddManual(){
+  if(lat===null){ alert(t('poi_no_gps')); return; }
+  const name = prompt(t('poi_name_prompt'), '');
+  if(name===null) return;
+  const label = name.trim() || formatCoord(lat, lng);
+  const poi = {
+    id: Date.now(),
+    name: label,
+    lat: lat,
+    lng: lng,
+    address: '',
+    created: new Date().toISOString()
+  };
+  const pois = loadPOIs();
+  pois.unshift(poi);
+  savePOIs(pois);
+  renderPOIs();
+  poiFetchAddress(poi.id, lat, lng);
+}
+
+function poiFetchAddress(id, pLat, pLng){
+  const card = document.querySelector('[data-poi-id="'+id+'"] .poi-address');
+  if(card) card.innerText = t('poi_fetching');
+  fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='+pLat+'&lon='+pLng+'&zoom=16',
+    {headers:{'Accept-Language': SETTINGS.lang}})
+  .then(r=>r.json())
+  .then(d=>{
+    const a = d.address||{};
+    const parts = [a.road, a.house_number, a.postcode, a.city||a.town||a.village, a.country].filter(Boolean);
+    const addr = parts.join(', ')||d.display_name||'';
+    const pois = loadPOIs();
+    const poi = pois.find(p=>p.id===id);
+    if(poi){ poi.address=addr; savePOIs(pois); }
+    if(card) card.innerText = addr;
+  })
+  .catch(()=>{ if(card) card.innerText=''; });
+}
+
+function poiDelete(id){
+  if(!confirm(t('poi_delete_confirm'))) return;
+  const pois = loadPOIs().filter(p=>p.id!==id);
+  savePOIs(pois);
+  renderPOIs();
+}
+
+function poiRename(id){
+  const pois = loadPOIs();
+  const poi = pois.find(p=>p.id===id);
+  if(!poi) return;
+  const name = prompt(t('poi_name_prompt'), poi.name);
+  if(name===null) return;
+  poi.name = name.trim()||poi.name;
+  savePOIs(pois);
+  renderPOIs();
+}
+
+function renderPOIs(){
+  const pois = loadPOIs();
+  const list  = document.getElementById('poi-list');
+  const empty = document.getElementById('poi-empty');
+  if(!list) return;
+  list.innerHTML = '';
+  if(pois.length===0){
+    empty.style.display='block';
+    return;
+  }
+  empty.style.display='none';
+
+  pois.forEach(poi=>{
+    const date = new Date(poi.created).toLocaleDateString(
+      SETTINGS.lang==='fr'?'fr-BE':SETTINGS.lang==='en'?'en-GB':'nl-BE',
+      {day:'numeric',month:'short',year:'numeric'}
+    );
+    const coordStr = formatCoord(poi.lat, poi.lng);
+    const card = document.createElement('div');
+    card.setAttribute('data-poi-id', poi.id);
+    card.style.cssText = 'background:var(--panel);border:1px solid #1a1a1a;border-left:3px solid #ff0050;border-radius:2px;padding:10px 12px;';
+    card.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+            <span style="font-size:1rem;">❤️</span>
+            <span style="font-size:0.72rem;color:#fff;font-weight:bold;font-family:'Courier New',monospace;
+              white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${poi.name}</span>
+          </div>
+          <div style="font-size:0.6rem;color:var(--green);font-family:'Courier New',monospace;margin-bottom:3px;">${coordStr}</div>
+          <div class="poi-address" style="font-size:0.58rem;color:#888;font-style:italic;line-height:1.4;">${poi.address||''}</div>
+          <div style="font-size:0.52rem;color:#333;margin-top:4px;">${date}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">
+          <button onclick="poiRename(${poi.id})"
+            style="background:var(--dim-green);border:1px solid var(--green);color:var(--green);
+            font-family:'Courier New',monospace;font-size:0.5rem;padding:4px 7px;
+            cursor:pointer;text-transform:uppercase;border-radius:2px;">✏️</button>
+          <button onclick="poiFetchAddress(${poi.id},${poi.lat},${poi.lng})"
+            style="background:var(--dim-blue);border:1px solid var(--blue);color:var(--blue);
+            font-family:'Courier New',monospace;font-size:0.5rem;padding:4px 7px;
+            cursor:pointer;text-transform:uppercase;border-radius:2px;">🔄</button>
+          <button onclick="poiDelete(${poi.id})"
+            style="background:rgba(255,0,0,0.08);border:1px solid var(--red);color:var(--red);
+            font-family:'Courier New',monospace;font-size:0.5rem;padding:4px 7px;
+            cursor:pointer;text-transform:uppercase;border-radius:2px;">🗑</button>
+        </div>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+
+}
+
+function initPOIPage(){
+  // i18n labels
+  const titleEl = document.getElementById('lbl-poi-title');
+  if(titleEl) titleEl.innerText = t('poi_title');
+  const addBtn = document.getElementById('lbl-poi-add-btn');
+  if(addBtn) addBtn.innerText = t('poi_add');
+  const emptyEl = document.getElementById('lbl-poi-empty');
+  if(emptyEl) emptyEl.innerText = t('poi_empty');
+  const hintEl = document.getElementById('lbl-poi-hint');
+  if(hintEl) hintEl.innerText = t('poi_hint');
+  renderPOIs();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SERVICE WORKER
+// ═══════════════════════════════════════════════════════════════
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js')
+      .then(r=>console.log('[SW]',r.scope))
+      .catch(e=>console.warn('[SW]',e));
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded',()=>{
+  loadSettings();
+  applyI18n();
+  rebuildFavBar();
+  rebuildLauncher();
+  resizeArc();
+  update();
+  // sync config UI to loaded settings
+  setTimeout(()=>{
+    syncSegBtn('timeFormat', SETTINGS.timeFormat);
+    syncSegBtn('coordFormat', SETTINGS.coordFormat);
+    syncSegBtn('tempUnit', SETTINGS.tempUnit);
+    syncVoiceBtn(SETTINGS.voice);
+    syncLangBtn(SETTINGS.lang);
+  }, 100);
+});
+
+const ro = new ResizeObserver(()=>{resizeArc(); drawArc();});
+const arcWrap = document.getElementById('arc-wrap');
+if(arcWrap) ro.observe(arcWrap);
+
+setInterval(update, 1000);
+</script>
+</body>
+</html>
